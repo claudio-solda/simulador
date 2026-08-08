@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>Simulador — Sistema de Visão + PSR</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0b0f14">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root{
+    --bg: #0b0f14;
+    --panel: #11161d;
+    --panel2: #151b23;
+    --line: #223140;
+    --text: #d7e2ec;
+    --dim: #7c8a99;
+    --ok: #21c17c;
+    --ng: #e05a4e;
+    --amber: #e0b23d;
+    --blue: #2f7dd9;
+    --mono: 'Courier New', monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .wrap{max-width:520px;margin:0 auto;padding:10px 10px 90px;}
+
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:10px 4px 14px;
+  }
+  .topbar h1{font-size:15px;margin:0;font-weight:700;letter-spacing:.3px;color:#fff;}
+  .topbar .sub{font-size:11px;color:var(--dim);margin-top:2px;}
+
+  .explain-toggle{
+    display:flex;align-items:center;gap:6px;
+    background:var(--panel2);border:1px solid var(--line);
+    border-radius:20px;padding:6px 10px;font-size:11px;color:var(--dim);
+    white-space:nowrap;
+  }
+  .explain-toggle.active{border-color:var(--amber);color:var(--amber);background:#241d0c;}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--dim);}
+  .explain-toggle.active .dot{background:var(--amber);}
+
+  .panel{
+    background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;margin-bottom:12px;overflow:hidden;
+    position:relative;
+  }
+  .panel-head{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:9px 12px;background:var(--panel2);border-bottom:1px solid var(--line);
+    font-size:11px;color:var(--dim);letter-spacing:.5px;text-transform:uppercase;
+  }
+  .panel-head b{color:#fff;font-size:12px;letter-spacing:.3px;}
+
+  /* ---- Painel Visão ---- */
+  .run-row{display:flex;gap:8px;padding:10px 12px 4px;align-items:center;}
+  .badge-run{
+    background:#3a2f10;color:var(--amber);font-size:11px;font-weight:700;
+    padding:4px 10px;border-radius:4px;display:flex;align-items:center;gap:6px;
+  }
+  .badge-run:before{content:'▶';font-size:9px;}
+  .status-ok{
+    font-size:26px;font-weight:800;color:#fff;background:var(--ok);
+    padding:2px 18px;border-radius:6px;margin:8px 12px 4px;display:inline-block;
+    cursor:pointer;
+  }
+  .status-ok.ng{background:var(--ng);}
+  .meta-line{font-size:10px;color:var(--dim);padding:0 12px 8px;}
+
+  .cam-view{
+    margin:0 12px 10px;aspect-ratio:1/0.78;border-radius:6px;overflow:hidden;
+    position:relative;background:#05070a;border:1px solid #1c2833;cursor:pointer;
+  }
+  .cam-grid{
+    position:absolute;inset:6%;display:grid;grid-template-columns:repeat(5,1fr);
+    grid-template-rows:repeat(4,1fr);gap:3%;
+  }
+  .cam-cell{
+    background:linear-gradient(135deg,#2a3540,#1a222a);
+    border-radius:2px;
+  }
+  .flash{
+    position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;
+    transition:opacity .08s;
+  }
+  .flash.on{opacity:.55;transition:opacity 0s;}
+  .roi-box{
+    position:absolute;width:26%;height:22%;border:2px solid var(--ok);
+    border-radius:2px;transition:border-color .2s;
+  }
+  .roi-box.ng{border-color:var(--ng);}
+  .roi-dot{
+    position:absolute;width:10px;height:10px;border-radius:50%;
+    background:var(--ok);box-shadow:0 0 6px var(--ok);transition:background .2s;
+  }
+  .roi-dot.ng{background:var(--ng);box-shadow:0 0 6px var(--ng);}
+
+  .metric-grid{padding:2px 12px 10px;display:flex;flex-direction:column;gap:6px;}
+  .metric-row{
+    display:flex;align-items:center;gap:8px;background:var(--panel2);
+    border:1px solid var(--line);border-radius:6px;padding:7px 9px;cursor:pointer;
+  }
+  .metric-row .name{flex:1;font-size:11.5px;color:var(--text);}
+  .metric-row .bar-wrap{flex:1;height:6px;background:#1c242c;border-radius:3px;overflow:hidden;}
+  .metric-row .bar{height:100%;background:var(--ok);border-radius:3px;transition:width .3s;}
+  .metric-row .pct{font-size:12px;font-weight:700;width:32px;text-align:right;color:#fff;}
+  .metric-row .chip{
+    font-size:10px;font-weight:800;padding:2px 7px;border-radius:4px;background:var(--ok);color:#03150c;
+    min-width:26px;text-align:center;
+  }
+  .metric-row .chip.ng{background:var(--ng);color:#1a0503;}
+
+  .stats-row{display:flex;gap:8px;padding:0 12px 12px;}
+  .stat-box{
+    flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:6px;
+    padding:6px 8px;font-family:var(--mono);
+  }
+  .stat-box .k{font-size:9px;color:var(--dim);}
+  .stat-box .v{font-size:13px;color:#fff;font-weight:700;}
+
+  /* ---- Painel PSR ---- */
+  .psr-head{
+    display:flex;justify-content:space-between;align-items:baseline;padding:12px 14px 4px;
+  }
+  .psr-head .title{font-size:17px;font-weight:800;color:#fff;letter-spacing:.5px;}
+  .psr-head .time{font-size:10px;color:var(--dim);text-align:right;}
+  .emerg{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--dim);padding:0 14px 8px;}
+  .emerg .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);}
+
+  .psr-body{padding:0 14px 8px;display:grid;grid-template-columns:1.3fr 1fr;gap:10px;}
+  .psr-fields{display:flex;flex-direction:column;gap:5px;}
+  .field{
+    display:flex;justify-content:space-between;gap:6px;font-size:11px;
+    border-bottom:1px dashed var(--line);padding:3px 0;cursor:pointer;
+  }
+  .field .fk{color:var(--dim);}
+  .field .fv{color:#fff;font-family:var(--mono);font-weight:700;}
+
+  .sensors{display:flex;flex-direction:column;gap:8px;}
+  .sensor-pair{display:flex;gap:6px;}
+  .sensor{
+    flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:6px;
+    padding:6px;text-align:center;cursor:pointer;
+  }
+  .sensor .lab{font-size:8.5px;color:var(--dim);line-height:1.2;height:22px;display:flex;align-items:center;justify-content:center;}
+  .led{width:22px;height:22px;border-radius:50%;margin:2px auto 0;background:#2a323b;border:2px solid #384252;}
+  .led.on-ok{background:var(--ok);border-color:var(--ok);box-shadow:0 0 8px var(--ok);}
+  .led.on-ng{background:var(--ng);border-color:var(--ng);box-shadow:0 0 8px var(--ng);}
+
+  .counters{display:flex;gap:8px;padding:4px 14px 10px;}
+  .counter{
+    flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:6px;
+    padding:8px;text-align:center;cursor:pointer;
+  }
+  .counter .num{font-size:22px;font-weight:800;font-family:var(--mono);color:#fff;}
+  .counter .lab{font-size:9.5px;color:var(--dim);margin-top:1px;}
+  .counter.ok .num{color:var(--ok);}
+  .counter.ng .num{color:var(--ng);}
+
+  .buttons-row{display:flex;gap:8px;padding:2px 14px 10px;}
+  .btn{
+    flex:1;padding:12px 6px;border-radius:6px;border:none;font-size:13px;font-weight:800;
+    color:#fff;cursor:pointer;text-align:center;
+  }
+  .btn.continuar{background:#8a5a2e;}
+  .btn.auto{background:var(--ok);color:#062b1a;}
+  .btn.auto.off{background:#3a4552;color:var(--dim);}
+
+  .status-bar{margin:2px 14px 12px;background:#132038;border:1px solid #234066;border-radius:6px;overflow:hidden;}
+  .status-bar .lab{font-size:9px;color:var(--dim);text-align:center;padding:3px 0 0;letter-spacing:.5px;}
+  .status-bar .val{
+    background:var(--blue);color:#fff;font-size:12px;font-weight:700;text-align:center;
+    padding:7px 0;margin-top:2px;
+  }
+
+  .tabs{display:flex;gap:1px;background:var(--line);border-top:1px solid var(--line);}
+  .tab{flex:1;background:var(--panel2);color:var(--dim);font-size:9.5px;text-align:center;padding:8px 2px;cursor:pointer;}
+  .tab.active{background:var(--blue);color:#fff;}
+
+  /* ---- Controles de simulação ---- */
+  .controls{
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:12px;margin-bottom:12px;
+  }
+  .controls h2{font-size:12px;margin:0 0 10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;}
+  .sim-btns{display:flex;gap:8px;}
+  .sim-btn{
+    flex:1;padding:13px 4px;border-radius:8px;border:none;font-size:13px;font-weight:800;cursor:pointer;
+  }
+  .sim-btn.ok{background:var(--ok);color:#062b1a;}
+  .sim-btn.ng{background:var(--ng);color:#2b0805;}
+  .sim-btn.auto-run{background:var(--blue);color:#fff;}
+  .sim-btn.reset{background:#3a4552;color:var(--dim);}
+  .row-2{display:flex;gap:8px;margin-top:8px;}
+
+  /* ---- Explicação flutuante ---- */
+  .explain-panel{
+    position:fixed;left:0;right:0;bottom:0;background:#161d26;
+    border-top:2px solid var(--amber);border-radius:16px 16px 0 0;
+    padding:16px 18px 22px;transform:translateY(110%);transition:transform .25s ease;
+    z-index:50;max-width:520px;margin:0 auto;box-shadow:0 -8px 30px rgba(0,0,0,.5);
+  }
+  .explain-panel.show{transform:translateY(0);}
+  .explain-panel h3{margin:0 0 6px;font-size:14px;color:var(--amber);}
+  .explain-panel p{margin:0;font-size:13px;line-height:1.5;color:var(--text);}
+  .explain-panel .close{
+    position:absolute;top:10px;right:14px;color:var(--dim);font-size:18px;cursor:pointer;
+  }
+
+  .hint{
+    text-align:center;font-size:11px;color:var(--dim);padding:6px 10px 0;
+  }
+  .hint b{color:var(--amber);}
+
+  .glossary{margin-top:4px;}
+  .gloss-item{
+    border-bottom:1px solid var(--line);padding:11px 2px;cursor:pointer;
+  }
+  .gloss-item .q{display:flex;justify-content:space-between;font-size:12.5px;font-weight:700;color:#fff;}
+  .gloss-item .a{font-size:12px;color:var(--dim);margin-top:6px;line-height:1.45;display:none;}
+  .gloss-item.open .a{display:block;}
+  .gloss-item .arrow{color:var(--dim);transition:transform .2s;}
+  .gloss-item.open .arrow{transform:rotate(180deg);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <div>
+      <h1>Simulador · Sistema de Visão + PSR</h1>
+      <div class="sub">Toque nos itens para entender cada função</div>
+    </div>
+  </div>
+
+  <div class="explain-toggle" id="explainToggle" onclick="toggleExplain()">
+    <span class="dot"></span>
+    <span id="explainLabel">Modo explicação: desligado</span>
+  </div>
+  <div class="hint" style="margin-top:8px;">Ligue o <b>modo explicação</b> e toque em qualquer indicador da tela — ou use os botões abaixo para simular peças passando.</div>
+
+  <!-- CONTROLES -->
+  <div class="controls">
+    <h2>Simular peça na linha</h2>
+    <div class="sim-btns">
+      <button class="sim-btn ok" onclick="runCycle('OK')">Passar peça OK</button>
+      <button class="sim-btn ng" onclick="runCycle('NG')">Passar peça NOK</button>
+    </div>
+    <div class="row-2">
+      <button class="sim-btn auto-run" id="autoBtn" onclick="toggleAuto()">▶ Rodar automático</button>
+      <button class="sim-btn reset" onclick="resetCounters()">Zerar contadores</button>
+    </div>
+  </div>
+
+  <!-- PAINEL DE VISÃO -->
+  <div class="panel" id="visionPanel">
+    <div class="panel-head"><b>Sistema de Visão</b><span>P004_PROG_004</span></div>
+    <div class="run-row">
+      <div class="badge-run">RUN</div>
+      <div class="meta-line" style="padding:0;">Programa 004 · Câmera 4</div>
+    </div>
+    <div class="status-ok" id="statusChip" data-k="status_geral">OK</div>
+    <div class="meta-line" id="procTime">Processo: 225ms · Captura: 18ms</div>
+
+    <div class="cam-view" id="camView" data-k="cam_view">
+      <div class="flash" id="flash"></div>
+      <div class="cam-grid" id="camGrid"></div>
+      <div class="roi-box" id="roiBox" style="top:34%;left:30%;"></div>
+      <div class="roi-dot" id="roiDot" style="top:60%;left:44%;"></div>
+    </div>
+
+    <div class="metric-grid">
+      <div class="metric-row" data-k="m_ajuste">
+        <div class="name">00 · Ajuste de Posição</div>
+        <div class="bar-wrap"><div class="bar" id="bar0" style="width:98%"></div></div>
+        <div class="pct" id="pct0">98</div>
+        <div class="chip" id="chip0">OK</div>
+      </div>
+      <div class="metric-row" data-k="m_ia1">
+        <div class="name">01 · IA de Identificação</div>
+        <div class="bar-wrap"><div class="bar" id="bar1" style="width:100%"></div></div>
+        <div class="pct" id="pct1">100</div>
+        <div class="chip" id="chip1">OK</div>
+      </div>
+      <div class="metric-row" data-k="m_ia2">
+        <div class="name">02 · IA de Identificação</div>
+        <div class="bar-wrap"><div class="bar" id="bar2" style="width:100%"></div></div>
+        <div class="pct" id="pct2">100</div>
+        <div class="chip" id="chip2">OK</div>
+      </div>
+      <div class="metric-row" data-k="m_ia3">
+        <div class="name">03 · IA de Identificação</div>
+        <div class="bar-wrap"><div class="bar" id="bar3" style="width:100%"></div></div>
+        <div class="pct" id="pct3">100</div>
+        <div class="chip" id="chip3">OK</div>
+      </div>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-box" data-k="s_tempo"><div class="k">TEMPO</div><div class="v" id="sTempo">225 ms</div></div>
+      <div class="stat-box" data-k="s_min"><div class="k">MÍN</div><div class="v" id="sMin">224 ms</div></div>
+      <div class="stat-box" data-k="s_max"><div class="k">MÁX</div><div class="v" id="sMax">226 ms</div></div>
+    </div>
+  </div>
+
+  <!-- PAINEL PSR -->
+  <div class="panel" id="psrPanel">
+    <div class="psr-head">
+      <span class="title">PSR · PRINCIPAL</span>
+      <span class="time" id="clock">10:14:03<br>07/08/2026</span>
+    </div>
+    <div class="emerg" data-k="emergencia"><span class="dot"></span> Emergência: normal</div>
+
+    <div class="psr-body">
+      <div class="psr-fields">
+        <div class="field" data-k="f_produto"><span class="fk">Produto</span><span class="fv">65.138.00</span></div>
+        <div class="field" data-k="f_prog"><span class="fk">Programa Câmera</span><span class="fv">4</span></div>
+        <div class="field" data-k="f_recuo"><span class="fk">Recuo Calha (mm)</span><span class="fv">150.00</span></div>
+        <div class="field" data-k="f_vel"><span class="fk">Velocidade mm/seg</span><span class="fv">200</span></div>
+        <div class="field" data-k="f_esteira"><span class="fk">Posição Esteira</span><span class="fv" id="fEsteira">518627.38</span></div>
+        <div class="field" data-k="f_calha"><span class="fk">Posição Calha Saída</span><span class="fv">150.00</span></div>
+      </div>
+      <div class="sensors">
+        <div class="sensor-pair">
+          <div class="sensor" data-k="sen_cortina">
+            <div class="lab">Cortina Peça</div>
+            <div class="led" id="ledCortina"></div>
+          </div>
+          <div class="sensor" data-k="sen_barreira">
+            <div class="lab">Sensor Barreira Saída</div>
+            <div class="led on-ok" id="ledBarreira"></div>
+          </div>
+        </div>
+        <div class="sensor-pair">
+          <div class="sensor" data-k="sen_okcam">
+            <div class="lab">Última Resposta OK</div>
+            <div class="led" id="ledCamOk"></div>
+          </div>
+          <div class="sensor" data-k="sen_ngcam">
+            <div class="lab">Última Resposta NG</div>
+            <div class="led" id="ledCamNg"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="counters">
+      <div class="counter ok" data-k="c_ok"><div class="num" id="countOk">1543</div><div class="lab">Peças OK</div></div>
+      <div class="counter ng" data-k="c_ng"><div class="num" id="countNg">0</div><div class="lab">Peças NOK</div></div>
+    </div>
+
+    <div class="buttons-row">
+      <button class="btn continuar" data-k="b_continuar">Continuar</button>
+      <button class="btn auto" id="btnAutoOn" data-k="b_auto">Automático ON</button>
+    </div>
+
+    <div class="status-bar" data-k="status_passo">
+      <div class="lab">PASSO 50</div>
+      <div class="val" id="statusVal">Aguardando Peça</div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active">Principal</div>
+      <div class="tab">Seleção</div>
+      <div class="tab">Parâmetros</div>
+      <div class="tab">Produção</div>
+      <div class="tab">Alarmes</div>
+    </div>
+  </div>
+
+  <!-- GLOSSÁRIO -->
+  <div class="panel">
+    <div class="panel-head"><b>Glossário rápido</b><span>toque p/ abrir</span></div>
+    <div class="glossary" id="glossary" style="padding:4px 12px 8px;"></div>
+  </div>
+
+</div>
+
+<div class="explain-panel" id="explainPanel">
+  <span class="close" onclick="closeExplain()">✕</span>
+  <h3 id="expTitle">Título</h3>
+  <p id="expText">Texto</p>
+</div>
+
+<script>
+// ---------- Dicionário de explicações ----------
+const DICT = {
+  status_geral: ["Resultado geral do ciclo", "É o veredito final da câmera para a peça que passou: OK (aprovada) ou NG (rejeitada). Ele resume o que as 4 ferramentas abaixo decidiram."],
+  cam_view: ["Imagem capturada pela câmera", "É a foto que a câmera tirou da peça no instante da inspeção. O quadro colorido (verde ou vermelho) mostra a região de interesse (ROI) que o sistema está analisando — normalmente um ponto de solda ou uma referência de posição."],
+  m_ajuste: ["Ferramenta 00 — Ajuste de Posição", "Verifica se a peça está na posição correta debaixo da câmera antes de inspecionar. Se a peça estiver torta ou fora do lugar, essa ferramenta já reprova antes mesmo da IA analisar o resto. O número é uma pontuação de confiança (0–100)."],
+  m_ia1: ["Ferramenta 01 — IA de Identificação", "Rede neural treinada para reconhecer se aquele ponto específico da peça está conforme (ex: presença de um furo, rebite ou cordão de solda). O score mostra o quanto o modelo está confiante na resposta."],
+  m_ia2: ["Ferramenta 02 — IA de Identificação", "Outra checagem de IA, olhando para uma região diferente da peça. Cada ferramenta (00 a 03) fiscaliza um ponto específico — é assim que o sistema consegue inspecionar vários detalhes na mesma foto."],
+  m_ia3: ["Ferramenta 03 — IA de Identificação", "Mais uma verificação de IA. Quando TODAS as ferramentas (00 a 03) retornam OK, a peça é aprovada. Se qualquer uma reprovar, o resultado geral vira NG."],
+  s_tempo: ["Tempo de processo", "Quanto tempo a câmera levou para capturar e analisar a peça neste ciclo. É o tempo real, ciclo a ciclo."],
+  s_min: ["Tempo mínimo", "O menor tempo de processo registrado no histórico recente. Serve para ver se o sistema está estável — se MÍN e MÁX estiverem muito distantes, pode indicar variação de iluminação, vibração ou processamento lento."],
+  s_max: ["Tempo máximo", "O maior tempo de processo registrado. Junto com MÍN e MÉD, ajuda a enxergar se o ciclo da câmera está consistente ou oscilando."],
+  emergencia: ["Status de emergência", "Indica se o botão de emergência da célula está pressionado. 'Normal' significa que nada travou o equipamento; se alguém aciona a emergência, esse indicador muda e a linha para."],
+  f_produto: ["Código do produto", "Identifica qual peça/modelo está sendo produzido agora. Cada produto pode ter um programa de câmera e parâmetros diferentes."],
+  f_prog: ["Programa da câmera", "Qual receita de inspeção está carregada. Trocar de produto normalmente troca também esse número — é o vínculo entre o PSR e o sistema de visão."],
+  f_recuo: ["Posição de recuo da calha", "Distância (em mm) que a calha de saída recua para liberar espaço para a peça ser depositada corretamente."],
+  f_vel: ["Velocidade da esteira", "Velocidade em mm/segundo com que a esteira está transportando as peças."],
+  f_esteira: ["Posição atual da esteira", "Contador acumulado da posição/encoder da esteira. Ele só cresce, servindo de referência para saber exatamente onde cada peça está no transporte."],
+  f_calha: ["Posição atual da calha de saída", "Onde a calha está posicionada agora, comparada com o valor de referência (recuo). Se estiver diferente do esperado, pode indicar falha mecânica."],
+  sen_cortina: ["Sensor de cortina", "Uma cortina de luz (sensores óticos) que detecta se há uma peça passando por um ponto específico. Quando a peça interrompe o feixe, o sensor muda de estado."],
+  sen_barreira: ["Sensor de barreira de saída", "Confirma que a peça realmente saiu da estação depois do processo, garantindo que não ficou peça parada no meio do caminho (double-check de segurança do processo)."],
+  sen_okcam: ["Indicador: última resposta OK", "Acende quando a última peça inspecionada pela câmera foi aprovada. É o link visual entre o resultado da câmera e o painel do PSR."],
+  sen_ngcam: ["Indicador: última resposta NG", "Acende quando a última peça foi reprovada pela câmera. Normalmente dispara um desvio da peça (rejeito) e soma no contador de NOK."],
+  c_ok: ["Contador de peças OK", "Total acumulado de peças aprovadas desde o último reset. É o principal indicador de produção boa do turno."],
+  c_ng: ["Contador de peças NOK", "Total acumulado de peças reprovadas. Comparar OK x NOK dá a taxa de rejeição da célula — importante indicador de qualidade do processo."],
+  b_continuar: ["Botão Continuar", "Usado depois que a linha para (por exemplo, por uma reprovação ou pequena falha) para retomar o ciclo manualmente, depois de o operador verificar a causa."],
+  b_auto: ["Automático ON", "Liga o modo automático da célula: o equipamento passa a rodar o ciclo completo sozinho, sem precisar de comando manual a cada peça."],
+  status_passo: ["Passo do programa (sequenciador)", "Mostra em qual etapa da lógica de automação a máquina está agora (ex: 'Aguardando Peça', 'Capturando', 'Liberando Peça'). É como um mapa de onde o PLC está dentro do ciclo."]
+};
+
+const GLOSS_ORDER = ["status_geral","cam_view","m_ajuste","m_ia1","f_produto","f_esteira","sen_cortina","sen_barreira","sen_okcam","sen_ngcam","c_ok","c_ng","b_auto","status_passo"];
+
+// ---------- Estado ----------
+let explainMode = false;
+let autoRunning = false;
+let autoTimer = null;
+let okCount = 1543;
+let ngCount = 0;
+let esteiraPos = 518627.38;
+
+function toggleExplain(){
+  explainMode = !explainMode;
+  const t = document.getElementById('explainToggle');
+  const l = document.getElementById('explainLabel');
+  t.classList.toggle('active', explainMode);
+  l.textContent = explainMode ? 'Modo explicação: ligado' : 'Modo explicação: desligado';
+}
+
+function openExplain(key){
+  const d = DICT[key];
+  if(!d) return;
+  document.getElementById('expTitle').textContent = d[0];
+  document.getElementById('expText').textContent = d[1];
+  document.getElementById('explainPanel').classList.add('show');
+}
+function closeExplain(){
+  document.getElementById('explainPanel').classList.remove('show');
+}
+
+document.addEventListener('click', function(e){
+  if(!explainMode) return;
+  const el = e.target.closest('[data-k]');
+  if(el){
+    openExplain(el.getAttribute('data-k'));
+  }
+});
+
+// ---------- Grade da câmera (visual) ----------
+const grid = document.getElementById('camGrid');
+for(let i=0;i<20;i++){
+  const c = document.createElement('div');
+  c.className = 'cam-cell';
+  grid.appendChild(c);
+}
+
+// ---------- Ciclo simulado ----------
+function rnd(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
+
+function setStatus(text, isOk){
+  const chip = document.getElementById('statusChip');
+  chip.textContent = text;
+  chip.classList.toggle('ng', !isOk);
+}
+
+function flashCamera(){
+  const f = document.getElementById('flash');
+  f.classList.add('on');
+  setTimeout(()=>f.classList.remove('on'), 90);
+}
+
+function setMetric(idx, val, ok){
+  document.getElementById('bar'+idx).style.width = val + '%';
+  document.getElementById('pct'+idx).textContent = val;
+  const chip = document.getElementById('chip'+idx);
+  chip.textContent = ok ? 'OK' : 'NG';
+  chip.classList.toggle('ng', !ok);
+}
+
+function runCycle(forceResult){
+  const statusVal = document.getElementById('statusVal');
+  statusVal.textContent = 'Peça Detectada';
+  document.getElementById('ledCortina').className = 'led on-ng';
+
+  setTimeout(()=>{
+    statusVal.textContent = 'Capturando Imagem';
+    flashCamera();
+    document.getElementById('roiBox').style.top = rnd(20,45)+'%';
+    document.getElementById('roiBox').style.left = rnd(15,45)+'%';
+    document.getElementById('roiDot').style.top = rnd(40,70)+'%';
+    document.getElementById('roiDot').style.left = rnd(30,60)+'%';
+  }, 220);
+
+  setTimeout(()=>{
+    statusVal.textContent = 'Processando IA';
+    const isOk = forceResult ? (forceResult === 'OK') : (Math.random() > 0.08);
+
+    const scores = [
+      isOk ? rnd(94,99) : rnd(40,80),
+      isOk ? rnd(97,100) : rnd(30,70),
+      isOk ? rnd(97,100) : rnd(20,75),
+      isOk ? rnd(97,100) : rnd(35,80)
+    ];
+    // se forçar NG, garante que pelo menos uma ferramenta reprove mesmo com score aparente
+    for(let i=0;i<4;i++){
+      const cellOk = isOk ? true : (i === rnd(0,3) ? false : Math.random()>0.3);
+      setMetric(i, scores[i], cellOk);
+    }
+    const procTime = rnd(220,231);
+    document.getElementById('procTime').textContent = `Processo: ${procTime}ms · Captura: 18ms`;
+    document.getElementById('sTempo').textContent = procTime+' ms';
+    document.getElementById('sMin').textContent = Math.min(procTime,224)+' ms';
+    document.getElementById('sMax').textContent = Math.max(procTime,226)+' ms';
+
+    document.getElementById('roiBox').classList.toggle('ng', !isOk);
+    document.getElementById('roiDot').classList.toggle('ng', !isOk);
+    setStatus(isOk ? 'OK' : 'NG', isOk);
+
+    document.getElementById('ledCamOk').className = 'led' + (isOk ? ' on-ok' : '');
+    document.getElementById('ledCamNg').className = 'led' + (!isOk ? ' on-ng' : '');
+    document.getElementById('ledCortina').className = 'led';
+    document.getElementById('ledBarreira').className = 'led on-ok';
+
+    if(isOk){ okCount++; } else { ngCount++; }
+    document.getElementById('countOk').textContent = okCount;
+    document.getElementById('countNg').textContent = ngCount;
+
+    esteiraPos += rnd(140,160)/10;
+    document.getElementById('fEsteira').textContent = esteiraPos.toFixed(2);
+
+    statusVal.textContent = isOk ? 'Liberando Peça' : 'Peça Rejeitada';
+  }, 650);
+
+  setTimeout(()=>{
+    statusVal.textContent = 'Aguardando Peça';
+  }, 1500);
+}
+
+function toggleAuto(){
+  autoRunning = !autoRunning;
+  const btn = document.getElementById('autoBtn');
+  btn.textContent = autoRunning ? '⏸ Parar automático' : '▶ Rodar automático';
+  document.getElementById('btnAutoOn').classList.toggle('off', !autoRunning);
+  if(autoRunning){
+    autoTimer = setInterval(()=>runCycle(null), 2200);
+  } else {
+    clearInterval(autoTimer);
+  }
+}
+
+function resetCounters(){
+  okCount = 0; ngCount = 0;
+  document.getElementById('countOk').textContent = 0;
+  document.getElementById('countNg').textContent = 0;
+}
+
+// ---------- Relógio ----------
+function tickClock(){
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2,'0');
+  const mm = String(now.getMinutes()).padStart(2,'0');
+  const ss = String(now.getSeconds()).padStart(2,'0');
+  const dd = String(now.getDate()).padStart(2,'0');
+  const mo = String(now.getMonth()+1).padStart(2,'0');
+  document.getElementById('clock').innerHTML = `${hh}:${mm}:${ss}<br>${dd}/${mo}/${now.getFullYear()}`;
+}
+setInterval(tickClock, 1000);
+tickClock();
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
+
+// ---------- Glossário ----------
+const glossEl = document.getElementById('glossary');
+GLOSS_ORDER.forEach(key=>{
+  const d = DICT[key];
+  const item = document.createElement('div');
+  item.className = 'gloss-item';
+  item.innerHTML = `<div class="q">${d[0]}<span class="arrow">▾</span></div><div class="a">${d[1]}</div>`;
+  item.addEventListener('click', ()=> item.classList.toggle('open'));
+  glossEl.appendChild(item);
+});
+</script>
+</body>
+</html>
